@@ -1,8 +1,10 @@
-import os
+
 import streamlit as st
 import requests
+import os
 from datetime import datetime
 
+# CONFIGURAÇÃO
 st.set_page_config(
     page_title="AI EXCHANGE ALPHA",
     page_icon="📊",
@@ -12,16 +14,25 @@ st.set_page_config(
 st.title("🤖 AI EXCHANGE ALPHA")
 st.caption("Painel inteligente de análise de mercados")
 
-st.info("Modo de demonstração: sem operações financeiras reais.")
+st.info(
+    "Modo de demonstração: análise de mercado, "
+    "sem operações financeiras reais."
+)
 
-# Configuração da CoinGecko
-API_URL = "https://api.coingecko.com/api/v3"
+# CHAVE DA COINGECKO
+def obter_chave():
+    return os.getenv("COINGECKO_API_KEY", "")
 
+
+# BUSCAR COTAÇÕES
 def buscar_cotacoes():
-   chave = os.getenv("COINGECKO_API_KEY", "")
+
+    chave = obter_chave()
+
     if not chave:
         raise Exception(
-            "Chave não encontrada. Verifique o nome do segredo."
+            "Chave não encontrada. Verifique "
+            "COINGECKO_API_KEY nos Secrets."
         )
 
     moedas = (
@@ -29,8 +40,10 @@ def buscar_cotacoes():
         "ripple,dogecoin,cardano"
     )
 
+    url = "https://api.coingecko.com/api/v3/simple/price"
+
     resposta = requests.get(
-        f"{API_URL}/simple/price",
+        url,
         params={
             "ids": moedas,
             "vs_currencies": "usd",
@@ -42,58 +55,76 @@ def buscar_cotacoes():
         timeout=20
     )
 
-    resposta.raise_for_status()
+    if resposta.status_code != 200:
+        raise Exception(
+            f"Erro da CoinGecko: HTTP {resposta.status_code} "
+            f"- {resposta.text[:300]}"
+        )
+
     return resposta.json()
 
 
+# CACHE
 @st.cache_data(ttl=30)
 def carregar_cotacoes():
     return buscar_cotacoes()
 
 
+# MERCADO
 st.subheader("📈 Mercado de criptomoedas")
 
 if st.button("🔄 Atualizar cotações"):
     carregar_cotacoes.clear()
 
+lista_moedas = [
+    ("Bitcoin", "bitcoin", "BTC"),
+    ("Ethereum", "ethereum", "ETH"),
+    ("Solana", "solana", "SOL"),
+    ("BNB", "binancecoin", "BNB"),
+    ("XRP", "ripple", "XRP"),
+    ("Dogecoin", "dogecoin", "DOGE"),
+    ("Cardano", "cardano", "ADA")
+]
+
 try:
     dados = carregar_cotacoes()
 
-    lista = [
-        ("Bitcoin", "bitcoin", "BTC"),
-        ("Ethereum", "ethereum", "ETH"),
-        ("Solana", "solana", "SOL"),
-        ("BNB", "binancecoin", "BNB"),
-        ("XRP", "ripple", "XRP"),
-        ("Dogecoin", "dogecoin", "DOGE"),
-        ("Cardano", "cardano", "ADA")
-    ]
-
     colunas = st.columns(2)
 
-    for i, (nome, id_moeda, simbolo) in enumerate(lista):
-        with colunas[i % 2]:
-            preco = dados[id_moeda]["usd"]
-            variacao = dados[id_moeda].get(
-                "usd_24h_change", 0
-            )
+    for i, (nome, identificador, simbolo) in enumerate(lista_moedas):
 
-            st.metric(
-                f"{nome} ({simbolo})",
-                f"US$ {preco:,.4f}",
-                f"{variacao:+.2f}%"
-            )
+        with colunas[i % 2]:
+
+            if identificador in dados:
+
+                preco = dados[identificador]["usd"]
+
+                variacao = dados[identificador].get(
+                    "usd_24h_change", 0
+                )
+
+                st.metric(
+                    f"{nome} ({simbolo})",
+                    f"US$ {preco:,.4f}",
+                    f"{variacao:+.2f}%"
+                )
+
+            else:
+                st.warning(
+                    f"Dados indisponíveis: {nome}"
+                )
 
     st.caption(
-        "Última consulta: " +
-        datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        "Última consulta: "
+        + datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     )
 
 except Exception as erro:
-    st.error(f"Erro ao buscar cotações: {erro}")
+    st.error(f"Não foi possível carregar as cotações: {erro}")
 
 st.divider()
 
+# SIMULADOR
 st.subheader("🧪 Simulador de investimento")
 
 capital = st.number_input(
@@ -104,8 +135,11 @@ capital = st.number_input(
 )
 
 variacao = st.slider(
-    "Variação simulada (%)",
-    -20.0, 20.0, 0.0, 0.5
+    "Simular variação do mercado (%)",
+    min_value=-20.0,
+    max_value=20.0,
+    value=0.0,
+    step=0.5
 )
 
 resultado = capital * (1 + variacao / 100)
@@ -116,6 +150,13 @@ st.metric(
     f"{variacao:+.1f}%"
 )
 
+st.divider()
+
+st.caption(
+    "AI EXCHANGE ALPHA - Versão de desenvolvimento."
+)
+
 st.warning(
-    "Simulação educativa. Não executa compras ou vendas."
+    "Simulação educativa. Não representa recomendação "
+    "financeira nem executa compras ou vendas."
 )
