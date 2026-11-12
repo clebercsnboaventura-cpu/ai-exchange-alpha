@@ -1,7 +1,6 @@
 
 import streamlit as st
 import requests
-import pandas as pd
 from datetime import datetime
 
 st.set_page_config(
@@ -11,50 +10,88 @@ st.set_page_config(
 )
 
 st.title("🤖 AI EXCHANGE ALPHA")
-st.caption("Painel inteligente de análise e simulação de mercados")
+st.caption("Painel inteligente de análise de mercados")
 
-st.info("Modo de demonstração: análise de mercado, sem operações reais.")
+st.info("Modo de demonstração: sem operações financeiras reais.")
 
-def buscar_preco(simbolo):
-    url = "https://api.binance.com/api/v3/ticker/price"
-    resposta = requests.get(
-        url,
-        params={"symbol": simbolo},
-        timeout=10
+# Configuração da CoinGecko
+API_URL = "https://api.coingecko.com/api/v3"
+
+def buscar_cotacoes():
+    chave = st.secrets.get("COINGECKO_API_KEY", "")
+
+    if not chave:
+        raise Exception(
+            "Chave não encontrada. Verifique o nome do segredo."
+        )
+
+    moedas = (
+        "bitcoin,ethereum,solana,binancecoin,"
+        "ripple,dogecoin,cardano"
     )
+
+    resposta = requests.get(
+        f"{API_URL}/simple/price",
+        params={
+            "ids": moedas,
+            "vs_currencies": "usd",
+            "include_24hr_change": "true"
+        },
+        headers={
+            "x-cg-demo-api-key": chave
+        },
+        timeout=20
+    )
+
     resposta.raise_for_status()
-    return float(resposta.json()["price"])
+    return resposta.json()
+
+
+@st.cache_data(ttl=30)
+def carregar_cotacoes():
+    return buscar_cotacoes()
+
 
 st.subheader("📈 Mercado de criptomoedas")
 
 if st.button("🔄 Atualizar cotações"):
-    st.cache_data.clear()
+    carregar_cotacoes.clear()
 
-@st.cache_data(ttl=30)
-def carregar_cotacoes():
-    dados = {}
-    for moeda in ["BTCUSDT", "ETHUSDT"]:
-        try:
-            dados[moeda] = buscar_preco(moeda)
-        except Exception:
-            dados[moeda] = None
-    return dados
+try:
+    dados = carregar_cotacoes()
 
-dados = carregar_cotacoes()
+    lista = [
+        ("Bitcoin", "bitcoin", "BTC"),
+        ("Ethereum", "ethereum", "ETH"),
+        ("Solana", "solana", "SOL"),
+        ("BNB", "binancecoin", "BNB"),
+        ("XRP", "ripple", "XRP"),
+        ("Dogecoin", "dogecoin", "DOGE"),
+        ("Cardano", "cardano", "ADA")
+    ]
 
-col1, col2 = st.columns(2)
+    colunas = st.columns(2)
 
-with col1:
-    if dados["BTCUSDT"] is not None:
-        st.metric("Bitcoin (BTC)", f"US$ {dados['BTCUSDT']:,.2f}")
-    else:
-        st.warning("Cotação do Bitcoin indisponível.")
+    for i, (nome, id_moeda, simbolo) in enumerate(lista):
+        with colunas[i % 2]:
+            preco = dados[id_moeda]["usd"]
+            variacao = dados[id_moeda].get(
+                "usd_24h_change", 0
+            )
 
-with col2:
-    if dados["ETHUSDT"] is not None:
-        st.metric("Ethereum (ETH)", f"US$ {dados['ETHUSDT']:,.2f}")
-    else:
-        st.warning("Cotação do Ethereum indisponível.")
+            st.metric(
+                f"{nome} ({simbolo})",
+                f"US$ {preco:,.4f}",
+                f"{variacao:+.2f}%"
+            )
+
+    st.caption(
+        "Última consulta: " +
+        datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    )
+
+except Exception as erro:
+    st.error(f"Erro ao buscar cotações: {erro}")
 
 st.divider()
 
@@ -68,11 +105,8 @@ capital = st.number_input(
 )
 
 variacao = st.slider(
-    "Simular variação do mercado (%)",
-    min_value=-20.0,
-    max_value=20.0,
-    value=0.0,
-    step=0.5
+    "Variação simulada (%)",
+    -20.0, 20.0, 0.0, 0.5
 )
 
 resultado = capital * (1 + variacao / 100)
@@ -83,12 +117,6 @@ st.metric(
     f"{variacao:+.1f}%"
 )
 
-st.caption(
-    "Última consulta: " +
-    datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-)
-
 st.warning(
-    "Simulação educativa. Não representa recomendação "
-    "financeira nem executa compras ou vendas."
+    "Simulação educativa. Não executa compras ou vendas."
 )
