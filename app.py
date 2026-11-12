@@ -1,4 +1,4 @@
-
+import os
 import streamlit as st
 import requests
 from datetime import datetime
@@ -18,8 +18,7 @@ st.info("Modo de demonstração: sem operações financeiras reais.")
 API_URL = "https://api.coingecko.com/api/v3"
 
 def buscar_cotacoes():
-    chave = st.secrets.get("COINGECKO_API_KEY", "")
-
+   chave = os.getenv("COINGECKO_API_KEY", "")
     if not chave:
         raise Exception(
             "Chave não encontrada. Verifique o nome do segredo."
